@@ -1,0 +1,83 @@
+import tkinter as tk
+import serial
+import threading
+import time
+
+class SeatOccupancyApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Seat Occupancy Monitor")
+
+        self.status_label = tk.Label(master, text="Seat Status: Unknown", font=("Helvetica", 16))
+        self.status_label.pack(pady=20)
+
+        self.serial_port_label = tk.Label(master, text="Serial Port:")
+        self.serial_port_label.pack()
+
+        self.serial_port_entry = tk.Entry(master)
+        self.serial_port_entry.pack()
+
+        self.connect_button = tk.Button(master, text="Connect", command=self.connect_serial)
+        self.connect_button.pack(pady=10)
+
+        self.disconnect_button = tk.Button(master, text="Disconnect", command=self.disconnect_serial, state=tk.DISABLED)
+        self.disconnect_button.pack(pady=5)
+
+        self.serial_connection = None
+        self.running = False
+        self.serial_thread = None
+
+    def connect_serial(self):
+        port = self.serial_port_entry.get()
+        try:
+            self.serial_connection = serial.Serial(port, 9600, timeout=1) #match arduino code
+            self.running = True
+            self.serial_thread = threading.Thread(target=self.read_serial_data)
+            self.serial_thread.start()
+
+            self.connect_button.config(state=tk.DISABLED)
+            self.disconnect_button.config(state=tk.NORMAL)
+            self.status_label.config(text="Connecting...")
+
+        except serial.SerialException:
+            self.status_label.config(text="Error: Could not connect to serial port.")
+
+    def disconnect_serial(self):
+        self.running = False
+        if self.serial_thread:
+            self.serial_thread.join()
+        if self.serial_connection:
+            self.serial_connection.close()
+            self.serial_connection = None
+        self.connect_button.config(state=tk.NORMAL)
+        self.disconnect_button.config(state=tk.DISABLED)
+        self.status_label.config(text="Seat Status: Disconnected")
+
+    def read_serial_data(self):
+        while self.running:
+            if self.serial_connection:
+                try:
+                    line = self.serial_connection.readline().decode('utf-8').strip()
+                    if line:
+                        self.update_status(line)
+                except serial.SerialException:
+                    self.disconnect_serial()
+                    break
+                except UnicodeDecodeError:
+                    print("Unicode decode error")
+                time.sleep(0.1)
+
+    def update_status(self, status):
+        self.status_label.config(text="Seat Status: " + status)
+
+    def on_closing(self):
+        self.disconnect_serial()
+        self.master.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SeatOccupancyApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    root.mainloop()
+
+ 
